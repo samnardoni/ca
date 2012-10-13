@@ -3,10 +3,16 @@ package main
 import (
 	"fmt"
 	"github.com/banthar/gl"
-	"github.com/banthar/glu"
 	"github.com/jteeuwen/glfw"
 	"math/rand"
 	"os"
+)
+
+const (
+	Title  = "Cellular Automata"
+	Size   = 200
+	Width  = Size * 3
+	Height = Size * 3
 )
 
 type Counter struct {
@@ -21,26 +27,18 @@ func (c *Counter) Tick() bool {
 	return false
 }
 
-const (
-	Title  = "Cellular Automata"
-	Width  = 480
-	Height = 480
-	Size   = 50
-)
-
 type GridBuf struct {
-	buf     [][][]bool
+	buf     [2][][]bool
 	current int
 }
 
 func NewGridBuf(size int) *GridBuf {
-	buf := make([][][]bool, 2)
+	var buf [2][][]bool
 
 	for b := 0; b < 2; b++ {
 		buf[b] = make([][]bool, size)
 
 		for i := 0; i < size; i++ {
-			buf[b][i] = make([]bool, size)
 			buf[b][i] = make([]bool, size)
 		}
 	}
@@ -62,12 +60,20 @@ func (g *GridBuf) Swap() {
 
 var (
 	grid    *GridBuf
+	pixels          = make([]uint8, Size*Size*3)
 	running bool    = true
 	counter Counter = Counter{hit: 3, current: 0}
 )
 
 func init() {
 	grid = NewGridBuf(Size)
+
+	// Randomise grid
+	for i := 0; i < (Size*Size)/4; i++ {
+		rx := rand.Int31n(Size-2) + 1
+		ry := rand.Int31n(Size-2) + 1
+		grid.Front()[ry][rx] = true
+	}
 }
 
 func main() {
@@ -90,12 +96,14 @@ func main() {
 	glfw.SetWindowSizeCallback(onResize)
 	glfw.SetKeyCallback(onKey)
 
-	initGL()
-	initGrid()
+	gl.ShadeModel(gl.SMOOTH)
+	gl.ClearColor(0, 0, 0, 0)
+	gl.ClearDepth(1)
+	gl.Enable(gl.TEXTURE_2D)
 
 	for running && glfw.WindowParam(glfw.Opened) == 1 {
 		update()
-		drawScene()
+		draw()
 	}
 }
 
@@ -107,32 +115,16 @@ func onResize(w, h int) {
 	gl.Viewport(0, 0, w, h)
 	gl.MatrixMode(gl.PROJECTION)
 	gl.LoadIdentity()
-	glu.Perspective(45.0, float64(w)/float64(h), 0.1, 100.0)
+	gl.Ortho(-1, 1, -1, 1, -1, 1)
 	gl.MatrixMode(gl.MODELVIEW)
 	gl.LoadIdentity()
+	gl.Disable(gl.DEPTH_TEST)
 }
 
 func onKey(key, state int) {
 	switch key {
 	case glfw.KeyEsc:
 		running = false
-	}
-}
-
-func initGL() {
-	gl.ShadeModel(gl.SMOOTH)
-	gl.ClearColor(0, 0, 0, 0)
-	gl.ClearDepth(1)
-	gl.Enable(gl.DEPTH_TEST)
-	gl.DepthFunc(gl.LEQUAL)
-	gl.Hint(gl.PERSPECTIVE_CORRECTION_HINT, gl.NICEST)
-}
-
-func initGrid() {
-	for i := 0; i < (Size*Size)/2; i++ {
-		rx := rand.Int31n(Size - 1)
-		ry := rand.Int31n(Size - 1)
-		grid.Front()[ry][rx] = true
 	}
 }
 
@@ -148,66 +140,63 @@ func update() {
 
 	for y := 1; y < Size-1; y++ {
 		for x := 1; x < Size-1; x++ {
-			sum := 0
-			if f[y-1][x-1] {
-				sum++
-			}
-			if f[y-1][x] {
-				sum++
-			}
-			if f[y-1][x+1] {
-				sum++
-			}
-			if f[y][x-1] {
-				sum++
-			}
-			if f[y][x+1] {
-				sum++
-			}
-			if f[y+1][x-1] {
-				sum++
-			}
-			if f[y+1][x] {
-				sum++
-			}
-			if f[y+1][x+1] {
-				sum++
+
+			neighbours := 0
+			for dy := -1; dy <= 1; dy++ {
+				for dx := -1; dx <= 1; dx++ {
+					if !(dx == 0 && dy == 0) && f[y+dy][x+dx] {
+						neighbours++
+					}
+				}
 			}
 
-			if sum == 2 {
+			if neighbours == 2 {
 				b[y][x] = f[y][x]
-			} else if sum == 3 {
+			} else if neighbours == 3 {
 				b[y][x] = true
 			} else {
 				b[y][x] = false
 			}
+
 		}
 	}
 }
 
-func drawScene() {
-	gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+func draw() {
+	for y := 0; y < Size; y++ {
+		for x := 0; x < Size; x++ {
 
-	for y := 1; y < Size-1; y++ {
-		for x := 1; x < Size-1; x++ {
-			gl.LoadIdentity()
-			gl.Scalef(0.85/float32(Size), 0.85/float32(Size), 1)
-			gl.Translatef(float32(x)-Size/2, float32(y)-Size/2, -1)
-
+			var color uint8
 			if grid.Front()[y][x] {
-				gl.Color3f(0.0, 0.0, 0.0)
+				color = 0x00
 			} else {
-				gl.Color3f(1.0, 1.0, 1.0)
+				color = 0xFF
 			}
 
-			gl.Begin(gl.QUADS)
-			gl.Vertex3f(0, 1, 0)
-			gl.Vertex3f(1, 1, 0)
-			gl.Vertex3f(1, 0, 0)
-			gl.Vertex3f(0, 0, 0)
-			gl.End()
+			pixels[(y*Size+x)*3+0] = color
+			pixels[(y*Size+x)*3+1] = color
+			pixels[(y*Size+x)*3+2] = color
+
 		}
 	}
+
+	gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+
+	gl.TexImage2D(gl.TEXTURE_2D, 0, 3, Size, Size, 0, gl.RGB, gl.UNSIGNED_BYTE, pixels)
+
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+
+	gl.Begin(gl.QUADS)
+	gl.TexCoord2f(0.0, 1.0)
+	gl.Vertex3f(-1.0, -1.0, 0.0)
+	gl.TexCoord2f(1.0, 1.0)
+	gl.Vertex3f(1.0, -1.0, 0.0)
+	gl.TexCoord2f(1.0, 0.0)
+	gl.Vertex3f(1.0, 1.0, 0.0)
+	gl.TexCoord2f(0.0, 0.0)
+	gl.Vertex3f(-1.0, 1.0, 0.0)
+	gl.End()
 
 	glfw.SwapBuffers()
 }
