@@ -11,8 +11,9 @@ import (
 const (
 	Title  = "Cellular Automata"
 	Size   = 200
-	Width  = Size * 3
-	Height = Size * 3
+	Zoom   = 3
+	Width  = Size * Zoom
+	Height = Size * Zoom
 )
 
 type Counter struct {
